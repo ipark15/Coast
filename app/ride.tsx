@@ -1,6 +1,15 @@
+import Mapbox, {
+  Camera,
+  LineLayer,
+  MapView,
+  ShapeSource,
+  UserLocation,
+  UserTrackingMode,
+} from '@rnmapbox/maps';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-
+import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,8 +17,10 @@ import PrimaryButton from '@/src/components/PrimaryButton';
 import SafetyBar from '@/src/components/SafetyBar';
 import { colors, radius, spacing, typography } from '@/src/tokens';
 import { LaneType, laneConfig } from '@/src/utils/laneColor';
+import { ROUTE_GEOJSON, ROUTE_START } from '@/src/utils/routeConfig';
 
-// TODO(MVP): Replace with real GPS + Mapbox Directions turn-by-turn data
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+
 const MOCK_NAV = {
   distanceToTurn: '200 FT',
   direction:      'right' as const,
@@ -31,6 +42,22 @@ const DIRECTION_ICON: Record<string, React.ComponentProps<typeof FontAwesome>['n
 export default function RideScreen() {
   const router  = useRouter();
   const insets  = useSafeAreaInsets();
+  const cameraRef = useRef<Camera>(null);
+  const [locationGranted, setLocationGranted] = useState(false);
+
+  // Request location permission on mount
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationGranted(status === 'granted');
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location required',
+          'Coast needs your location to show your position on the route.',
+        );
+      }
+    })();
+  }, []);
 
   const handleFinish = () =>
     Alert.alert('End ride?', '', [
@@ -41,12 +68,46 @@ export default function RideScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── Map area (fills entire screen) ── */}
-      <View style={StyleSheet.absoluteFill}>
-        <LiveMapPlaceholder />
-      </View>
+      {/* ── Live Mapbox map ── */}
+      <MapView
+        style={StyleSheet.absoluteFill}
+        styleURL="mapbox://styles/mapbox/light-v11"
+        logoEnabled={false}
+        attributionEnabled={false}
+        scaleBarEnabled={false}
+      >
+        {/* Camera follows user location in navigation mode */}
+        <Camera
+          ref={cameraRef}
+          followUserLocation={locationGranted}
+          followUserMode={UserTrackingMode.FollowWithCourse}
+          followZoomLevel={16}
+          defaultSettings={{ centerCoordinate: ROUTE_START, zoomLevel: 15 }}
+        />
 
-      {/* ── Top safe area with header + turn card ── */}
+        {/* Colored route line */}
+        <ShapeSource id="route" shape={ROUTE_GEOJSON}>
+          <LineLayer
+            id="routeLine"
+            style={{
+              lineColor: ['get', 'color'],
+              lineWidth: 6,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+          />
+        </ShapeSource>
+
+        {/* Live user location puck */}
+        {locationGranted && (
+          <UserLocation
+            visible
+            animated
+          />
+        )}
+      </MapView>
+
+      {/* ── Top overlays (turn card + lane pill) ── */}
       <SafeAreaView edges={['top']} style={styles.topOverlay} pointerEvents="box-none">
 
         {/* Turn instruction card */}
@@ -81,14 +142,12 @@ export default function RideScreen() {
       {/* ── Fixed bottom bar ── */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
 
-        {/* Safety bar */}
         <View style={styles.safetyRow}>
           <Text style={styles.safetyLabel}>ROUTE SAFETY BREAKDOWN</Text>
           <Text style={styles.safetyPct}>{MOCK_NAV.safePercent}% PROTECTED</Text>
         </View>
         <SafetyBar safe={MOCK_NAV.safety.safe} caution={MOCK_NAV.safety.caution} hard={MOCK_NAV.safety.hard} />
 
-        {/* Stats */}
         <View style={styles.statsRow}>
           <StatCol label="TIME LEFT" value={MOCK_NAV.timeLeft} />
           <View style={styles.statDivider} />
@@ -97,7 +156,6 @@ export default function RideScreen() {
           <StatCol label="ARRIVAL"   value={MOCK_NAV.arrival} />
         </View>
 
-        {/* Buttons */}
         <View style={styles.buttons}>
           <PrimaryButton
             label="Finish Ride"
@@ -112,50 +170,9 @@ export default function RideScreen() {
         </View>
 
       </View>
-
     </View>
   );
 }
-
-// ─── Live map placeholder ─────────────────────────────────────────────────────
-// TODO(MVP): Replace this entire component with a Mapbox MapView in navigation
-// mode. Needs: MAPBOX_ACCESS_TOKEN env var, @rnmapbox/maps installed, live
-// GPS location from expo-location, and a route LineLayer with colored segments.
-
-function LiveMapPlaceholder() {
-  return (
-    <View style={map.container}>
-      <View style={map.badge}>
-        <FontAwesome name="map-marker" size={12} color={colors.teal} />
-        <Text style={map.badgeText}>Live map — API key required</Text>
-      </View>
-
-      {/* Simulated road grid */}
-      <View style={map.grid}>
-        <View style={map.roadH} />
-        <View style={map.roadV} />
-        <View style={[map.roadH, { top: '65%' }]} />
-        <View style={[map.roadV, { left: '70%' }]} />
-      </View>
-
-      {/* Simulated colored route line */}
-      <View style={map.routeWrap}>
-        <View style={[map.routeSeg, { flex: 85, backgroundColor: colors.safe }]} />
-        <View style={[map.routeSeg, { flex: 10, backgroundColor: colors.caution }]} />
-        <View style={[map.routeSeg, { flex: 5,  backgroundColor: colors.hard }]} />
-      </View>
-
-      {/* User location puck */}
-      <View style={map.puckOuter}>
-        <View style={map.puckInner} />
-      </View>
-
-      <Text style={map.hint}>Mapbox renders here once API key is added</Text>
-    </View>
-  );
-}
-
-// ─── Stat column ──────────────────────────────────────────────────────────────
 
 function StatCol({ label, value }: { label: string; value: string }) {
   return (
@@ -166,21 +183,14 @@ function StatCol({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.mapBackground,
-  },
+  root: { flex: 1, backgroundColor: colors.mapBackground },
 
-  // Top overlay (sits above the map)
   topOverlay: {
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
   },
 
-  // Turn card
   turnCard: {
     backgroundColor: colors.headerDark,
     borderRadius: radius.lg,
@@ -195,83 +205,40 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   turnLeft:     { flex: 1, gap: spacing.sm },
-  turnDistance: {
-    ...typography.label,
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 11,
-    letterSpacing: 0.5,
-  },
-  turnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
+  turnDistance: { ...typography.label, color: 'rgba(255,255,255,0.65)', fontSize: 11, letterSpacing: 0.5 },
+  turnRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   arrowBox: {
-    width: 52,
-    height: 52,
+    width: 52, height: 52,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  turnStreet: {
-    ...typography.heading,
-    color: colors.surface,
-    flex: 1,
-    lineHeight: 24,
-  },
-  speakerBtn: {
-    marginTop: 4,
-    padding: spacing.xs,
-  },
+  turnStreet:  { ...typography.heading, color: colors.surface, flex: 1, lineHeight: 24 },
+  speakerBtn:  { marginTop: 4, padding: spacing.xs },
 
-  // Lane row
-  laneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
+  laneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   lanePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: colors.safeLight,
     borderRadius: radius.full,
-    paddingVertical: 5,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 5, paddingHorizontal: spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    shadowOpacity: 0.06, shadowRadius: 3,
     elevation: 2,
   },
-  laneDot: {
-    width: 7,
-    height: 7,
-    borderRadius: radius.full,
-    backgroundColor: colors.safe,
-  },
-  lanePillText: {
-    ...typography.label,
-    color: colors.safe,
-    fontSize: 11,
-    letterSpacing: 0.3,
-  },
+  laneDot:      { width: 7, height: 7, borderRadius: radius.full, backgroundColor: colors.safe },
+  lanePillText: { ...typography.label, color: colors.safe, fontSize: 11, letterSpacing: 0.3 },
   laneNext: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
+    ...typography.bodySmall, color: colors.textSecondary,
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 4, paddingHorizontal: spacing.sm,
   },
 
-  // Fixed bottom bar
   bottomBar: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
@@ -284,141 +251,24 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 10,
   },
-
-  // Safety
   safetyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
   },
-  safetyLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 10,
-  },
-  safetyPct: {
-    ...typography.label,
-    color: colors.safe,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  // Stats
+  safetyLabel: { ...typography.label, color: colors.textMuted, fontSize: 10 },
+  safetyPct:   { ...typography.label, color: colors.safe, fontSize: 11, fontWeight: '600' },
   statsRow: {
     flexDirection: 'row',
     paddingVertical: spacing.sm,
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    alignSelf: 'stretch',
-  },
-
-  // Buttons
-  buttons: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  finishBtn: {
-    flex: 1,
-  },
+  statDivider: { width: 1, backgroundColor: colors.border, alignSelf: 'stretch' },
+  buttons:     { flexDirection: 'row', gap: spacing.sm },
+  finishBtn:   { flex: 1 },
   closeBtn: {
     width: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.border,
     borderRadius: radius.lg,
-  },
-});
-
-const map = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.mapBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // "API key required" badge
-  badge: {
-    position: 'absolute',
-    top: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: radius.full,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  badgeText: {
-    ...typography.label,
-    color: colors.teal,
-    fontSize: 11,
-    letterSpacing: 0,
-  },
-
-  // Simulated road grid lines
-  grid: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  roadH: {
-    position: 'absolute',
-    top: '40%',
-    left: 0,
-    right: 0,
-    height: 12,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  roadV: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: '35%',
-    width: 12,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-
-  // Colored route line
-  routeWrap: {
-    position: 'absolute',
-    top: '39%',
-    left: '35%',
-    width: '55%',
-    height: 6,
-    flexDirection: 'row',
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  routeSeg: { height: '100%' },
-
-  // User puck
-  puckOuter: {
-    position: 'absolute',
-    top: '38%',
-    left: '34%',
-    width: 22,
-    height: 22,
-    borderRadius: radius.full,
-    backgroundColor: colors.tealLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  puckInner: {
-    width: 12,
-    height: 12,
-    borderRadius: radius.full,
-    backgroundColor: colors.teal,
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-
-  hint: {
-    position: 'absolute',
-    bottom: '32%',
-    ...typography.bodySmall,
-    color: colors.textMuted,
   },
 });
 

@@ -36,8 +36,8 @@ const LEVEL_BG: Record<'safe' | 'caution', string> = {
 export default function ExploreScreen() {
   const router = useRouter();
 
-  const handleSearch     = () => router.push('/comfort');
-  const handleDestination = () => router.push('/comfort');
+  const handleSearch      = () => router.push('/search' as any);
+  const handleDestination = () => router.push('/search' as any);
 
   return (
     <SafeAreaView style={styles.safe}>

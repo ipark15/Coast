@@ -1,3 +1,10 @@
+import Mapbox, {
+  Camera,
+  LineLayer,
+  MapView,
+  PointAnnotation,
+  ShapeSource,
+} from '@rnmapbox/maps';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -19,8 +26,10 @@ import RouteListItem from '@/src/components/RouteListItem';
 import SafetyBar from '@/src/components/SafetyBar';
 import { colors, radius, spacing, typography } from '@/src/tokens';
 import { LaneType, laneConfig } from '@/src/utils/laneColor';
+import { ROUTE_CENTER, ROUTE_END, ROUTE_GEOJSON } from '@/src/utils/routeConfig';
 
-// TODO(MVP): Replace with real route data from Mapbox Directions API
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+
 const MOCK_ROUTE = {
   destination: 'Silver Lake Reservoir',
   address:     '1850 W Silver Lake Dr',
@@ -45,17 +54,15 @@ const DRAG_RANGE      = SHEET_EXPANDED - SHEET_COLLAPSED;
 export default function MapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [isExpanded, setIsExpanded]   = useState(false);
-  const [learnLane, setLearnLane]     = useState<LaneType | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [learnLane, setLearnLane]   = useState<LaneType | null>(null);
 
   const positionRef   = useRef(DRAG_RANGE);
-  const isExpandedRef = useRef(false);
   const translateY    = useRef(new Animated.Value(DRAG_RANGE)).current;
 
   const snapTo = (expand: boolean) => {
     const toValue = expand ? 0 : DRAG_RANGE;
-    positionRef.current   = toValue;
-    isExpandedRef.current = expand;
+    positionRef.current = toValue;
     setIsExpanded(expand);
     Animated.spring(translateY, { toValue, useNativeDriver: true, tension: 65, friction: 11 }).start();
   };
@@ -69,10 +76,8 @@ export default function MapScreen() {
         translateY.setValue(Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy)));
       },
       onPanResponderRelease: (_, { dy, vy }) => {
-        const landed    = Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy));
-        const goingUp   = vy < -0.3;
-        const goingDown = vy >  0.3;
-        snapTo(goingDown ? false : goingUp ? true : landed < DRAG_RANGE / 2);
+        const landed = Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy));
+        snapTo(vy < -0.3 ? true : vy > 0.3 ? false : landed < DRAG_RANGE / 2);
       },
     })
   ).current;
@@ -80,7 +85,7 @@ export default function MapScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── Dark green header (in document flow) ── */}
+      {/* ── Dark green header ── */}
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.headerBtn}>
@@ -98,10 +103,41 @@ export default function MapScreen() {
 
       {/* ── Map + overlays ── */}
       <View style={styles.mapArea}>
-        {/* Map placeholder */}
-        <View style={StyleSheet.absoluteFill}>
-          <MapPlaceholder onTapLearn={() => setLearnLane('caution')} />
-        </View>
+
+        {/* Mapbox map */}
+        <MapView
+          style={StyleSheet.absoluteFill}
+          styleURL="mapbox://styles/mapbox/light-v11"
+          logoEnabled={false}
+          attributionEnabled={false}
+          scaleBarEnabled={false}
+        >
+          <Camera
+            centerCoordinate={ROUTE_CENTER}
+            zoomLevel={13.5}
+            animationMode="none"
+          />
+
+          {/* Colored route segments */}
+          <ShapeSource id="route" shape={ROUTE_GEOJSON}>
+            <LineLayer
+              id="routeLine"
+              style={{
+                lineColor: ['get', 'color'],
+                lineWidth: 5,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </ShapeSource>
+
+          {/* Destination pin */}
+          <PointAnnotation id="destination" coordinate={ROUTE_END}>
+            <View style={styles.destPin}>
+              <FontAwesome name="map-marker" size={24} color={colors.teal} />
+            </View>
+          </PointAnnotation>
+        </MapView>
 
         {/* Destination card overlaid on map */}
         <View style={styles.destCard}>
@@ -110,9 +146,7 @@ export default function MapScreen() {
           </View>
           <View style={styles.destText}>
             <Text style={styles.destName}>Navigating to Silver Lake</Text>
-            <Text style={styles.destAddress}>
-              <FontAwesome name="map-marker" size={11} color={colors.textMuted} /> {MOCK_ROUTE.address}
-            </Text>
+            <Text style={styles.destAddress}>{MOCK_ROUTE.address}</Text>
           </View>
           <TouchableOpacity style={styles.destNav} hitSlop={8}>
             <FontAwesome name="location-arrow" size={16} color={colors.teal} />
@@ -121,10 +155,7 @@ export default function MapScreen() {
 
         {/* Draggable bottom sheet */}
         <Animated.View
-          style={[
-            styles.sheet,
-            { height: SHEET_EXPANDED + insets.bottom, transform: [{ translateY }] },
-          ]}
+          style={[styles.sheet, { height: SHEET_EXPANDED + insets.bottom, transform: [{ translateY }] }]}
         >
           <View style={styles.dragArea} {...panResponder.panHandlers}>
             <View style={styles.handle} />
@@ -155,27 +186,6 @@ export default function MapScreen() {
           onClose={() => setLearnLane(null)}
         />
       )}
-    </View>
-  );
-}
-
-// ─── Map placeholder ─────────────────────────────────────────────────────────
-
-function MapPlaceholder({ onTapLearn }: { onTapLearn: () => void }) {
-  return (
-    <View style={map.container}>
-      {/* TODO(MVP): Replace with Mapbox MapView + colored route LineLayer */}
-      <Text style={map.label}>Map preview</Text>
-      <Text style={map.sub}>Mapbox renders here once API key is added</Text>
-      <View style={map.routeTrack}>
-        <View style={[map.segment, { flex: 78, backgroundColor: colors.safe }]} />
-        <View style={[map.segment, { flex: 15, backgroundColor: colors.caution }]} />
-        <View style={[map.segment, { flex: 7,  backgroundColor: colors.hard }]} />
-      </View>
-      <TouchableOpacity style={map.tooltip} onPress={onTapLearn} activeOpacity={0.8}>
-        <View style={map.tooltipDot} />
-        <Text style={map.tooltipText}>Tap to learn</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -270,13 +280,8 @@ function LaneLearnSheet({ type, insetBottom, onClose }: { type: LaneType; insetB
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.headerDark,
-  },
-  headerSafe: {
-    backgroundColor: colors.headerDark,
-  },
+  root:       { flex: 1, backgroundColor: colors.headerDark },
+  headerSafe: { backgroundColor: colors.headerDark },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -285,19 +290,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   headerBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 32, height: 32,
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    ...typography.subheading,
-    color: colors.surface,
-  },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle:  { ...typography.subheading, color: colors.surface },
   headerSub: {
     ...typography.label,
     color: 'rgba(255,255,255,0.6)',
@@ -305,23 +302,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   headerIconCircle: {
-    width: 32,
-    height: 32,
+    width: 32, height: 32,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  mapArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+
+  mapArea: { flex: 1, backgroundColor: colors.mapBackground },
+
+  destPin: { alignItems: 'center' },
+
   destCard: {
     position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
-    right: spacing.md,
+    top: spacing.md, left: spacing.md, right: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     flexDirection: 'row',
@@ -335,30 +329,16 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   destIconWrap: {
-    width: 38,
-    height: 38,
+    width: 38, height: 38,
     borderRadius: radius.md,
     backgroundColor: colors.tealLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   destText: { flex: 1 },
-  destName: {
-    ...typography.subheading,
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  destAddress: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  destNav: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  destName: { ...typography.subheading, color: colors.textPrimary, fontSize: 14 },
+  destAddress: { ...typography.bodySmall, color: colors.textMuted, marginTop: 2 },
+  destNav: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+
   sheet: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
@@ -372,150 +352,40 @@ const styles = StyleSheet.create({
     elevation: 8,
     overflow: 'hidden',
   },
-  dragArea: {
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  handle: {
-    width: 44,
-    height: 5,
-    borderRadius: radius.full,
-    backgroundColor: colors.border,
-  },
-  sheetContent: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-  },
-});
-
-const map = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.mapBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  label: { ...typography.subheading, color: colors.textMuted },
-  sub:   { ...typography.bodySmall, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl },
-  routeTrack: {
-    flexDirection: 'row',
-    height: 6,
-    width: '70%',
-    borderRadius: radius.full,
-    overflow: 'hidden',
-    marginTop: spacing.md,
-  },
-  segment: { height: '100%' },
-  tooltip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.cautionLight,
-    borderRadius: radius.full,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    gap: 4,
-    marginTop: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.caution,
-  },
-  tooltipDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.caution,
-  },
-  tooltipText: {
-    ...typography.label,
-    color: colors.caution,
-    letterSpacing: 0,
-    fontSize: 12,
-  },
+  dragArea:    { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  handle:      { width: 44, height: 5, borderRadius: radius.full, backgroundColor: colors.border },
+  sheetContent:{ flex: 1, paddingHorizontal: spacing.md },
 });
 
 const card = StyleSheet.create({
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    flexDirection: 'row', alignItems: 'center',
+    gap: spacing.sm, marginBottom: spacing.xs,
   },
   recommendedBadge: {
     backgroundColor: colors.tealLight,
     borderRadius: radius.full,
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 3, paddingHorizontal: spacing.sm,
   },
-  recommendedText: {
-    ...typography.label,
-    color: colors.teal,
-    fontSize: 9,
-    letterSpacing: 0.5,
+  recommendedText: { ...typography.label, color: colors.teal, fontSize: 9, letterSpacing: 0.5 },
+  routeName:  { ...typography.subheading, color: colors.textPrimary, flex: 1 },
+  time:       { ...typography.subheading, color: colors.textPrimary, fontSize: 16 },
+  subtitleRow:{
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: spacing.sm,
   },
-  routeName: {
-    ...typography.subheading,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  time: {
-    ...typography.subheading,
-    color: colors.textPrimary,
-    fontSize: 16,
-  },
-  subtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  description: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    flex: 1,
-  },
-  distance: {
-    ...typography.label,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: 11,
-    letterSpacing: 0.3,
-  },
+  description:{ ...typography.bodySmall, color: colors.textMuted, flex: 1 },
+  distance:   { ...typography.label, color: colors.textSecondary, fontWeight: '600', fontSize: 11, letterSpacing: 0.3 },
   profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 6,
   },
-  profileLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 10,
-  },
-  profilePct: {
-    ...typography.label,
-    color: colors.safe,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  buttons: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  halfBtn: {
-    flex: 1,
-  },
-  collapseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  collapseText: {
-    ...typography.label,
-    color: colors.teal,
-    letterSpacing: 0,
-    fontSize: 12,
-  },
+  profileLabel: { ...typography.label, color: colors.textMuted, fontSize: 10 },
+  profilePct:   { ...typography.label, color: colors.safe, fontSize: 11, fontWeight: '600' },
+  buttons:    { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  halfBtn:    { flex: 1 },
+  collapseBtn:{ flexDirection: 'row', alignItems: 'center' },
+  collapseText:{ ...typography.label, color: colors.teal, letterSpacing: 0, fontSize: 12 },
 });
 
 const learn = StyleSheet.create({
@@ -535,12 +405,8 @@ const learn = StyleSheet.create({
     elevation: 12,
   },
   description: { ...typography.body, color: colors.textSecondary },
-  tip: {
-    borderLeftWidth: 3,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-  },
-  tipText:   { ...typography.bodySmall, fontStyle: 'italic' },
-  close:     { alignItems: 'center', paddingVertical: spacing.sm },
-  closeText: { ...typography.subheading, color: colors.teal },
+  tip:         { borderLeftWidth: 3, borderRadius: radius.sm, padding: spacing.sm },
+  tipText:     { ...typography.bodySmall, fontStyle: 'italic' },
+  close:       { alignItems: 'center', paddingVertical: spacing.sm },
+  closeText:   { ...typography.subheading, color: colors.teal },
 });

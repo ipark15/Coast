@@ -12,8 +12,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="comfort" />
+      <Stack.Screen name="route-summary" />
+      <Stack.Screen name="map" />
+      <Stack.Screen name="preview" />
+      <Stack.Screen name="ride" />
     </Stack>
   );
 }

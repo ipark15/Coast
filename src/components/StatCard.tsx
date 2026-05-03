@@ -5,12 +5,13 @@ import { colors, radius, spacing, typography } from '../tokens';
 interface Props {
   value: string;
   label: string;
+  valueColor?: string;
 }
 
-export default function StatCard({ value, label }: Props) {
+export default function StatCard({ value, label, valueColor }: Props) {
   return (
     <View style={styles.card}>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={[styles.value, valueColor ? { color: valueColor } : undefined]}>{value}</Text>
       <Text style={styles.label}>{label.toUpperCase()}</Text>
     </View>
   );

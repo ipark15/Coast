@@ -6,23 +6,37 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { colors, radius, spacing, typography } from '@/src/tokens';
 
 const RECENT_DESTINATIONS = [
-  { id: '1', name: 'Silver Lake Reservoir' },
-  { id: '2', name: 'Griffith Park' },
-  { id: '3', name: 'Echo Park Lake' },
+  { id: '1', name: 'Silver Lake Reservoir', address: '1850 W Silver Lake Dr, LA' },
+  { id: '2', name: 'Griffith Park',         address: '4730 Crystal Springs Dr, LA' },
+  { id: '3', name: 'Echo Park Lake',        address: '751 Echo Park Ave, LA' },
+];
+
+const RECOMMENDED = [
+  { id: '1', name: 'Los Feliz Boulevard', distance: '4.2 km', time: '12 min', level: 'BEGINNER', levelType: 'safe' as const },
+  { id: '2', name: 'Ocean View Loop',     distance: '6.5 km', time: '19 min', level: 'INTER',    levelType: 'caution' as const },
 ];
 
 function getGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'GOOD MORNING';
-  if (hour < 17) return 'GOOD AFTERNOON';
-  return 'GOOD EVENING';
+  if (hour < 12) return 'Good morning.';
+  if (hour < 17) return 'Good afternoon.';
+  return 'Good evening.';
 }
+
+const LEVEL_COLORS: Record<'safe' | 'caution', string> = {
+  safe:    colors.safe,
+  caution: colors.caution,
+};
+
+const LEVEL_BG: Record<'safe' | 'caution', string> = {
+  safe:    colors.safeLight,
+  caution: colors.cautionLight,
+};
 
 export default function ExploreScreen() {
   const router = useRouter();
 
-  // TODO(MVP): Replace with real search — for now navigates with hardcoded destination
-  const handleSearch = () => router.push('/comfort');
+  const handleSearch     = () => router.push('/comfort');
   const handleDestination = () => router.push('/comfort');
 
   return (
@@ -31,43 +45,89 @@ export default function ExploreScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.brand}>
-            <FontAwesome name="bullseye" size={22} color={colors.teal} />
-            <Text style={styles.brandName}>Bicycle Kitchen</Text>
-          </View>
           <TouchableOpacity hitSlop={8}>
-            <FontAwesome name="sliders" size={20} color={colors.textSecondary} />
+            <FontAwesome name="bars" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.brandName}>Bicycle Kitchen</Text>
+          <TouchableOpacity style={styles.avatar} hitSlop={8}>
+            <FontAwesome name="user" size={14} color={colors.teal} />
           </TouchableOpacity>
         </View>
 
-        {/* Greeting */}
-        <Text style={styles.greeting}>{getGreeting()}</Text>
-        <Text style={styles.headline}>Where are you{'\n'}heading today?</Text>
+        {/* Greeting + headline */}
+        <Text style={styles.headline}>
+          {getGreeting()}{'\n'}Where are you{'\n'}heading today?
+        </Text>
 
         {/* Search card */}
-        <TouchableOpacity style={styles.searchCard} onPress={handleSearch} activeOpacity={0.8}>
-          <View style={styles.searchRow}>
-            <FontAwesome name="search" size={16} color={colors.textMuted} />
-            <Text style={styles.searchPlaceholder}>Search destination...</Text>
+        <TouchableOpacity style={styles.searchCard} onPress={handleSearch} activeOpacity={0.85}>
+          <View style={styles.searchInner}>
+            <FontAwesome name="search" size={15} color={colors.textMuted} />
+            <Text style={styles.searchPlaceholder}>Search destination</Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.locationRow}>
-            <View style={styles.locationDot} />
-            <Text style={styles.locationText}>From: Your location</Text>
+          <View style={styles.goButton}>
+            <Text style={styles.goText}>GO</Text>
+            <FontAwesome name="arrow-right" size={11} color={colors.surface} />
           </View>
         </TouchableOpacity>
 
-        {/* Explore link — non-interactive for MVP */}
-        <Text style={styles.exploreLink}>or explore beginner routes →</Text>
+        {/* Explore link */}
+        <Text style={styles.exploreLink}>or explore beginner routes</Text>
+
+        {/* Live conditions card */}
+        <View style={styles.conditionsCard}>
+          <View style={styles.conditionsTop}>
+            <View style={styles.conditionsBadge}>
+              <View style={styles.conditionsDot} />
+              <Text style={styles.conditionsSafe}>98% SAFE</Text>
+            </View>
+            <Text style={styles.conditionsOption}>Some streets are okay</Text>
+            <Text style={styles.conditionsLevel}>Intermediate</Text>
+          </View>
+          <View style={styles.conditionsBottom}>
+            <Text style={styles.conditionsTag}>LIVE CONDITIONS</Text>
+            <Text style={styles.conditionsRoute}>Silver Lake Loop</Text>
+          </View>
+        </View>
+
+        {/* Stats card */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <FontAwesome name="bicycle" size={20} color={colors.teal} />
+            <View>
+              <Text style={styles.statLabel}>TOTAL DISTANCE</Text>
+              <Text style={styles.statValue}>12.4 km</Text>
+            </View>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <FontAwesome name="sun-o" size={20} color={colors.caution} />
+            <View>
+              <Text style={styles.statLabel}>CONDITIONS</Text>
+              <Text style={styles.statValue}>74° F</Text>
+              <Text style={styles.statSub}>Perfect for a mid-day cruise.</Text>
+            </View>
+          </View>
+        </View>
 
         {/* Recent */}
-        <Text style={styles.sectionLabel}>RECENT</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>Recent</Text>
+          <TouchableOpacity hitSlop={8}>
+            <Text style={styles.clearAll}>CLEAR ALL</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.recentList}>
           {RECENT_DESTINATIONS.map((dest, index) => (
             <View key={dest.id}>
               <TouchableOpacity style={styles.recentRow} onPress={handleDestination} activeOpacity={0.7}>
-                <FontAwesome name="map-pin" size={14} color={colors.textMuted} />
-                <Text style={styles.recentName}>{dest.name}</Text>
+                <View style={styles.recentIconWrap}>
+                  <FontAwesome name="map-marker" size={14} color={colors.textMuted} />
+                </View>
+                <View style={styles.recentText}>
+                  <Text style={styles.recentName}>{dest.name}</Text>
+                  <Text style={styles.recentAddr}>{dest.address}</Text>
+                </View>
                 <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
               </TouchableOpacity>
               {index < RECENT_DESTINATIONS.length - 1 && <View style={styles.hairline} />}
@@ -75,23 +135,36 @@ export default function ExploreScreen() {
           ))}
         </View>
 
+        {/* Recommended */}
+        <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Recommended for You</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recHScroll} contentContainerStyle={styles.recHContent}>
+          {RECOMMENDED.map((route) => (
+            <TouchableOpacity key={route.id} style={styles.recCard} onPress={handleDestination} activeOpacity={0.85}>
+              <View style={[styles.recTag, { backgroundColor: LEVEL_BG[route.levelType] }]}>
+                <Text style={[styles.recTagText, { color: LEVEL_COLORS[route.levelType] }]}>{route.level}</Text>
+              </View>
+              {/* TODO(MVP): Replace with actual Mapbox route preview thumbnail */}
+              <View style={styles.recMapPlaceholder} />
+              <Text style={styles.recName}>{route.name}</Text>
+              <View style={styles.recMeta}>
+                <FontAwesome name="map-marker" size={10} color={colors.textMuted} />
+                <Text style={styles.recMetaText}>{route.distance}</Text>
+                <FontAwesome name="clock-o" size={10} color={colors.textMuted} />
+                <Text style={styles.recMetaText}>{route.time}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing.md,
-    paddingTop: spacing.sm,
-  },
+  safe:    { flex: 1, backgroundColor: colors.background },
+  scroll:  { flex: 1 },
+  content: { padding: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xl },
 
   // Header
   header: {
@@ -100,35 +173,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.lg,
   },
-  brand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   brandName: {
     ...typography.subheading,
     color: colors.teal,
   },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.tealLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Greeting
-  greeting: {
-    ...typography.label,
-    color: colors.textMuted,
-    marginBottom: spacing.xs,
-  },
   headline: {
-    ...typography.displayLarge,
+    fontSize: 28,
+    fontWeight: '700',
     color: colors.textPrimary,
+    lineHeight: 36,
     marginBottom: spacing.lg,
   },
 
-  // Search card
+  // Search
   searchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    paddingLeft: spacing.md,
+    paddingRight: 6,
+    paddingVertical: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -136,71 +213,229 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: spacing.sm,
   },
-  searchRow: {
+  searchInner: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingVertical: spacing.sm,
   },
   searchPlaceholder: {
     ...typography.body,
     color: colors.textMuted,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  locationRow: {
+  goButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    backgroundColor: colors.teal,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: 6,
   },
-  locationDot: {
-    width: 10,
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: colors.safe,
-  },
-  locationText: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
+  goText: {
+    ...typography.subheading,
+    color: colors.surface,
+    fontSize: 13,
   },
 
   // Explore link
   exploreLink: {
     ...typography.bodySmall,
     color: colors.textTeal,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     marginTop: spacing.xs,
   },
 
-  // Recent
-  sectionLabel: {
+  // Live conditions card
+  conditionsCard: {
+    backgroundColor: colors.headerDark,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    minHeight: 110,
+    justifyContent: 'space-between',
+  },
+  conditionsTop: {
+    gap: 4,
+  },
+  conditionsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  conditionsDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.safe,
+  },
+  conditionsSafe: {
+    ...typography.label,
+    color: colors.safe,
+    fontSize: 11,
+  },
+  conditionsOption: {
+    ...typography.subheading,
+    color: colors.surface,
+  },
+  conditionsLevel: {
+    ...typography.bodySmall,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  conditionsBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  conditionsTag: {
+    ...typography.label,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 10,
+  },
+  conditionsRoute: {
+    ...typography.bodySmall,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+  },
+
+  // Stats card
+  statsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    padding: spacing.md,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  statItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    alignSelf: 'stretch',
+  },
+  statLabel: {
     ...typography.label,
     color: colors.textMuted,
+    marginBottom: 2,
+  },
+  statValue: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+  },
+  statSub: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+
+  // Section header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
+  sectionLabel: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+  },
+  clearAll: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+
+  // Recent list
   recentList: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
   },
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
     paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  recentIconWrap: {
+    width: 28,
+    alignItems: 'center',
+  },
+  recentText: {
+    flex: 1,
   },
   recentName: {
     ...typography.body,
     color: colors.textPrimary,
-    flex: 1,
+  },
+  recentAddr: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
   },
   hairline: {
     height: 1,
     backgroundColor: colors.border,
+  },
+
+  // Recommended
+  recHScroll:   { marginHorizontal: -spacing.md },
+  recHContent:  { paddingHorizontal: spacing.md, gap: spacing.sm, paddingBottom: spacing.xs },
+  recCard: {
+    width: 160,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  recTag: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    borderRadius: radius.full,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    zIndex: 1,
+  },
+  recTagText: {
+    ...typography.label,
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  recMapPlaceholder: {
+    height: 90,
+    backgroundColor: colors.mapPlaceholder,
+  },
+  recName: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+    fontSize: 13,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  recMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingTop: 4,
+  },
+  recMetaText: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    fontSize: 11,
   },
 });

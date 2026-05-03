@@ -32,6 +32,11 @@ export default function PreviewScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.container}>
 
+        {/* ── Back row ── */}
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()} hitSlop={12} activeOpacity={0.7}>
+          <FontAwesome name="arrow-left" size={18} color={colors.teal} />
+        </TouchableOpacity>
+
         {/* ── Image area (top ~55%) ── */}
         <View style={styles.imageArea}>
           {/* TODO(MVP): Replace with Google Street View WebView or Mapbox 3D */}
@@ -43,9 +48,6 @@ export default function PreviewScreen() {
 
           {/* Top-left overlay */}
           <View style={styles.imageTopBar}>
-            <TouchableOpacity onPress={() => router.back()} hitSlop={8} style={styles.backButton}>
-              <FontAwesome name="arrow-left" size={16} color={colors.surface} />
-            </TouchableOpacity>
             <Text style={styles.previewLabel}>Preview your ride</Text>
           </View>
 
@@ -138,7 +140,7 @@ function Scrubber({
       <View style={scrubber.labels}>
         {stops
           .filter((s) => s.label)
-          .map((stop, i) => (
+          .map((stop) => (
             <TouchableOpacity
               key={stop.label}
               onPress={() => onSeek(stops.indexOf(stop))}
@@ -164,16 +166,22 @@ function Scrubber({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
+  },
+  backRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+    alignSelf: 'flex-start',
   },
 
   // Image area
   imageArea: {
     flex: 55,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: colors.previewSurface,
     position: 'relative',
   },
   imagePlaceholder: {

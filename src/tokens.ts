@@ -24,6 +24,17 @@ export const colors = {
   // Navigation
   navActive:     '#0F6E56',
   navInactive:   '#9E9E9E',
+
+  // Dark header (map/ride screens)
+  headerDark:    '#1B3A2B',
+
+  // Map / placeholder surfaces
+  mapBackground: '#E8E4D8',
+  mapPlaceholder: '#D4D0C8',
+
+  // Preview / street-view screen
+  previewBg:      '#1A1A1A',
+  previewSurface: '#2A2A2A',
 };
 
 export const typography = {

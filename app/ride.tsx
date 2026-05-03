@@ -1,28 +1,26 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Alert, Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import PrimaryButton from '@/src/components/PrimaryButton';
 import SafetyBar from '@/src/components/SafetyBar';
 import { colors, radius, spacing, typography } from '@/src/tokens';
 import { LaneType, laneConfig } from '@/src/utils/laneColor';
 
-// TODO(MVP): Replace with real GPS position + Mapbox Directions turn-by-turn
-const MOCK_TURNS: {
-  distance: string;
-  direction: 'straight' | 'left' | 'right';
-  street: string;
-  laneType: LaneType;
-  laneDistance: string;
-  remainingMi: string;
-  remainingMin: number;
-  progress: number; // 0–1 position along route
-}[] = [
-  { distance: '0.3 mi', direction: 'right',    street: 'Rowena Ave',       laneType: 'safe',    laneDistance: '0.8 mi', remainingMi: '1.6 mi', remainingMin: 18, progress: 0.15 },
-  { distance: '0.2 mi', direction: 'straight',  street: 'Silver Lake Blvd', laneType: 'caution', laneDistance: '0.3 mi', remainingMi: '1.1 mi', remainingMin: 12, progress: 0.45 },
-  { distance: '0.1 mi', direction: 'left',      street: 'Reservoir Dr',     laneType: 'safe',    laneDistance: '0.2 mi', remainingMi: '0.4 mi', remainingMin: 5,  progress: 0.80 },
-];
+// TODO(MVP): Replace with real GPS + Mapbox Directions turn-by-turn data
+const MOCK_NAV = {
+  distanceToTurn: '200 FT',
+  direction:      'right' as const,
+  street:         'Fountain Ave',
+  laneType:       'safe' as LaneType,
+  timeLeft:       '14 min',
+  distance:       '3.2 mi',
+  arrival:        '10:42 am',
+  safePercent:    85,
+  safety:         { safe: 85, caution: 10, hard: 5 },
+};
 
 const DIRECTION_ICON: Record<string, React.ComponentProps<typeof FontAwesome>['name']> = {
   straight: 'arrow-up',
@@ -30,350 +28,402 @@ const DIRECTION_ICON: Record<string, React.ComponentProps<typeof FontAwesome>['n
   right:    'arrow-right',
 };
 
-const BOTTOM_SHEET_HEIGHT = 160;
-
-function getArrivalTime(minutesFromNow: number) {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() + minutesFromNow);
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
 export default function RideScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const [turnIndex, setTurnIndex] = useState(0);
+  const router  = useRouter();
+  const insets  = useSafeAreaInsets();
 
-  const turn = MOCK_TURNS[turnIndex];
-  const laneConf = laneConfig[turn.laneType];
-  const isLast = turnIndex === MOCK_TURNS.length - 1;
-
-  // Bottom sheet drag — same pattern as map screen
-  const COLLAPSED = BOTTOM_SHEET_HEIGHT;
-  const EXPANDED  = 280;
-  const DRAG_RANGE = EXPANDED - COLLAPSED;
-
-  const positionRef = useRef(0); // starts collapsed (0 = no extra offset)
-  const translateY  = useRef(new Animated.Value(0)).current;
-
-  const snapSheet = (expand: boolean) => {
-    const toValue = expand ? -DRAG_RANGE : 0;
-    positionRef.current = toValue;
-    Animated.spring(translateY, { toValue, useNativeDriver: true, tension: 65, friction: 11 }).start();
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  (_, { dy }) => Math.abs(dy) > 4,
-      onPanResponderGrant: () => { translateY.stopAnimation(); },
-      onPanResponderMove: (_, { dy }) => {
-        const next = Math.max(-DRAG_RANGE, Math.min(0, positionRef.current + dy));
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        const landed = positionRef.current + dy;
-        const goingUp   = vy < -0.3;
-        const goingDown = vy >  0.3;
-        const expand    = goingDown ? false : goingUp ? true : landed < -DRAG_RANGE / 2;
-        snapSheet(expand);
-      },
-    })
-  ).current;
-
-  const handleNextTurn = () => {
-    if (isLast) {
-      Alert.alert("You've arrived!", 'Welcome to Silver Lake Reservoir.', [
-        { text: 'Done', onPress: () => router.dismiss(4) },
-      ]);
-    } else {
-      setTurnIndex((i) => i + 1);
-    }
-  };
-
-  const handleEndRide = () => {
+  const handleFinish = () =>
     Alert.alert('End ride?', '', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'End ride', style: 'destructive', onPress: () => router.dismiss(4) },
+      { text: 'End ride', style: 'destructive', onPress: () => router.dismiss() },
     ]);
-  };
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.root}>
 
-      {/* ── Full-screen map ── */}
+      {/* ── Map area (fills entire screen) ── */}
       <View style={StyleSheet.absoluteFill}>
-        <NavMapPlaceholder progress={turn.progress} turnIndex={turnIndex} />
+        <LiveMapPlaceholder />
       </View>
 
-      {/* ── Top turn instruction overlay ── */}
-      <View style={[styles.turnCard, { top: insets.top + spacing.sm }]}>
-        <TouchableOpacity style={styles.arrowBox} onPress={handleNextTurn} activeOpacity={0.85}>
-          <FontAwesome name={DIRECTION_ICON[turn.direction]} size={28} color={colors.teal} />
-        </TouchableOpacity>
-        <View style={styles.turnText}>
-          <Text style={styles.inDistance}>IN {turn.distance}</Text>
-          <Text style={styles.inStreet}>{turn.street}</Text>
-        </View>
-        <TouchableOpacity onPress={handleEndRide} style={styles.exitButton} hitSlop={8}>
-          <FontAwesome name="times" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
+      {/* ── Top safe area with header + turn card ── */}
+      <SafeAreaView edges={['top']} style={styles.topOverlay} pointerEvents="box-none">
 
-      {/* ── Upcoming lane badge ── */}
-      <View style={[styles.laneBadge, { top: insets.top + 100 }]}>
-        <View style={[styles.laneDot, { backgroundColor: laneConf.color }]} />
-        <Text style={[styles.laneLabel, { color: laneConf.color }]}>
-          {laneConf.label} ahead · {turn.laneDistance}
-        </Text>
-      </View>
-
-      {/* ── Bottom stats sheet ── */}
-      <Animated.View
-        style={[
-          styles.bottomSheet,
-          { paddingBottom: insets.bottom + spacing.sm, transform: [{ translateY }] },
-          { bottom: -(EXPANDED - COLLAPSED) },
-        ]}
-      >
-        {/* Drag handle */}
-        <View style={styles.dragArea} {...panResponder.panHandlers}>
-          <View style={styles.handle} />
+        {/* Turn instruction card */}
+        <View style={styles.turnCard}>
+          <View style={styles.turnLeft}>
+            <Text style={styles.turnDistance}>IN {MOCK_NAV.distanceToTurn}</Text>
+            <View style={styles.turnRow}>
+              <View style={styles.arrowBox}>
+                <FontAwesome name={DIRECTION_ICON[MOCK_NAV.direction]} size={26} color={colors.headerDark} />
+              </View>
+              <Text style={styles.turnStreet}>Turn right on{'\n'}{MOCK_NAV.street}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.speakerBtn} hitSlop={8}>
+            <FontAwesome name="volume-up" size={16} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
         </View>
 
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <StatItem value={turn.remainingMi} label="Remaining" />
-          <View style={styles.statDivider} />
-          <StatItem value={getArrivalTime(turn.remainingMin)} label="Arrival" />
-          <View style={styles.statDivider} />
-          <StatItem value={turn.laneDistance} label="Protected ahead" />
+        {/* Lane status pill */}
+        <View style={styles.laneRow}>
+          <View style={styles.lanePill}>
+            <View style={styles.laneDot} />
+            <Text style={styles.lanePillText}>
+              CURRENTLY: {laneConfig[MOCK_NAV.laneType].label.toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.laneNext}>Then 1.2 mi</Text>
         </View>
+
+      </SafeAreaView>
+
+      {/* ── Fixed bottom bar ── */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
 
         {/* Safety bar */}
-        <View style={styles.safetyBarRow}>
-          <SafetyBar safe={78} caution={15} hard={7} />
+        <View style={styles.safetyRow}>
+          <Text style={styles.safetyLabel}>ROUTE SAFETY BREAKDOWN</Text>
+          <Text style={styles.safetyPct}>{MOCK_NAV.safePercent}% PROTECTED</Text>
+        </View>
+        <SafetyBar safe={MOCK_NAV.safety.safe} caution={MOCK_NAV.safety.caution} hard={MOCK_NAV.safety.hard} />
+
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          <StatCol label="TIME LEFT" value={MOCK_NAV.timeLeft} />
+          <View style={styles.statDivider} />
+          <StatCol label="DISTANCE"  value={MOCK_NAV.distance} />
+          <View style={styles.statDivider} />
+          <StatCol label="ARRIVAL"   value={MOCK_NAV.arrival} />
         </View>
 
-        {/* End ride */}
-        <TouchableOpacity style={styles.endRide} onPress={handleEndRide}>
-          <Text style={styles.endRideText}>End ride</Text>
-        </TouchableOpacity>
-      </Animated.View>
+        {/* Buttons */}
+        <View style={styles.buttons}>
+          <PrimaryButton
+            label="Finish Ride"
+            icon="flag-checkered"
+            variant="dark"
+            onPress={handleFinish}
+            style={styles.finishBtn}
+          />
+          <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()} activeOpacity={0.8}>
+            <FontAwesome name="times" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+      </View>
 
     </View>
   );
 }
 
-// ─── Navigation map placeholder ───────────────────────────────────────────────
+// ─── Live map placeholder ─────────────────────────────────────────────────────
+// TODO(MVP): Replace this entire component with a Mapbox MapView in navigation
+// mode. Needs: MAPBOX_ACCESS_TOKEN env var, @rnmapbox/maps installed, live
+// GPS location from expo-location, and a route LineLayer with colored segments.
 
-function NavMapPlaceholder({ progress, turnIndex }: { progress: number; turnIndex: number }) {
-  // TODO(MVP): Replace with Mapbox MapView in navigation mode (heading-up, user location puck)
+function LiveMapPlaceholder() {
   return (
-    <View style={navMap.container}>
-      <Text style={navMap.label}>Navigation map</Text>
-      <Text style={navMap.sub}>Live GPS + Mapbox renders here</Text>
-
-      {/* Route progress track */}
-      <View style={navMap.track}>
-        {/* Completed portion */}
-        <View style={[navMap.completed, { flex: Math.round(progress * 100) }]} />
-        {/* Remaining safe */}
-        <View style={[navMap.remaining, { flex: Math.round((1 - progress) * 78) }]} />
-        {/* Remaining caution */}
-        <View style={[navMap.caution, { flex: Math.round((1 - progress) * 15) }]} />
-        {/* Remaining hard */}
-        <View style={[navMap.hard, { flex: Math.round((1 - progress) * 7) }]} />
+    <View style={map.container}>
+      <View style={map.badge}>
+        <FontAwesome name="map-marker" size={12} color={colors.teal} />
+        <Text style={map.badgeText}>Live map — API key required</Text>
       </View>
 
-      {/* Current position puck */}
-      <View style={[navMap.puck, { alignSelf: 'flex-start', marginLeft: `${progress * 70 + 15}%` as any }]}>
-        <FontAwesome name="circle" size={14} color={colors.teal} />
+      {/* Simulated road grid */}
+      <View style={map.grid}>
+        <View style={map.roadH} />
+        <View style={map.roadV} />
+        <View style={[map.roadH, { top: '65%' }]} />
+        <View style={[map.roadV, { left: '70%' }]} />
       </View>
 
-      <Text style={navMap.turnCount}>Turn {turnIndex + 1} of {3}</Text>
+      {/* Simulated colored route line */}
+      <View style={map.routeWrap}>
+        <View style={[map.routeSeg, { flex: 85, backgroundColor: colors.safe }]} />
+        <View style={[map.routeSeg, { flex: 10, backgroundColor: colors.caution }]} />
+        <View style={[map.routeSeg, { flex: 5,  backgroundColor: colors.hard }]} />
+      </View>
+
+      {/* User location puck */}
+      <View style={map.puckOuter}>
+        <View style={map.puckInner} />
+      </View>
+
+      <Text style={map.hint}>Mapbox renders here once API key is added</Text>
     </View>
   );
 }
 
-// ─── Inline stat item ─────────────────────────────────────────────────────────
+// ─── Stat column ──────────────────────────────────────────────────────────────
 
-function StatItem({ value, label }: { value: string; label: string }) {
+function StatCol({ label, value }: { label: string; value: string }) {
   return (
-    <View style={stat.item}>
+    <View style={stat.col}>
       <Text style={stat.value}>{value}</Text>
-      <Text style={stat.label}>{label.toUpperCase()}</Text>
+      <Text style={stat.label}>{label}</Text>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screen: {
+  root: {
     flex: 1,
-    backgroundColor: '#E8E4D8',
+    backgroundColor: colors.mapBackground,
   },
 
-  // Turn instruction card
-  turnCard: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.sm,
+  // Top overlay (sits above the map)
+  topOverlay: {
+    paddingHorizontal: spacing.md,
     gap: spacing.sm,
+  },
+
+  // Turn card
+  turnCard: {
+    backgroundColor: colors.headerDark,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 5,
   },
-  arrowBox: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    backgroundColor: colors.tealLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  turnText: {
-    flex: 1,
-  },
-  inDistance: {
+  turnLeft:     { flex: 1, gap: spacing.sm },
+  turnDistance: {
     ...typography.label,
-    color: colors.textMuted,
-    marginBottom: 2,
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
-  inStreet: {
-    ...typography.heading,
-    color: colors.textPrimary,
-  },
-  exitButton: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Lane badge
-  laneBadge: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
+  turnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.md,
+  },
+  arrowBox: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
     backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  laneDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
+  turnStreet: {
+    ...typography.heading,
+    color: colors.surface,
+    flex: 1,
+    lineHeight: 24,
   },
-  laneLabel: {
-    ...typography.bodySmall,
-    fontWeight: '500',
+  speakerBtn: {
+    marginTop: 4,
+    padding: spacing.xs,
   },
 
-  // Bottom sheet
-  bottomSheet: {
+  // Lane row
+  laneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  lanePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.safeLight,
+    borderRadius: radius.full,
+    paddingVertical: 5,
+    paddingHorizontal: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  laneDot: {
+    width: 7,
+    height: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.safe,
+  },
+  lanePillText: {
+    ...typography.label,
+    color: colors.safe,
+    fontSize: 11,
+    letterSpacing: 0.3,
+  },
+  laneNext: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: radius.full,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+  },
+
+  // Fixed bottom bar
+  bottomBar: {
     position: 'absolute',
+    bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 10,
   },
-  dragArea: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  handle: {
-    width: 44,
-    height: 5,
-    borderRadius: radius.full,
-    backgroundColor: colors.border,
-  },
-  statsRow: {
+
+  // Safety
+  safetyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+  },
+  safetyLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  safetyPct: {
+    ...typography.label,
+    color: colors.safe,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
     paddingVertical: spacing.sm,
   },
   statDivider: {
     width: 1,
-    height: 36,
     backgroundColor: colors.border,
+    alignSelf: 'stretch',
   },
-  safetyBarRow: {
-    marginBottom: spacing.sm,
+
+  // Buttons
+  buttons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
-  endRide: {
+  finishBtn: {
+    flex: 1,
+  },
+  closeBtn: {
+    width: 52,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  endRideText: {
-    ...typography.subheading,
-    color: colors.textMuted,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
   },
 });
 
-const navMap = StyleSheet.create({
+const map = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8E4D8',
+    backgroundColor: colors.mapBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
   },
-  label:   { ...typography.subheading, color: colors.textMuted },
-  sub:     { ...typography.bodySmall, color: colors.textMuted },
-  track: {
+
+  // "API key required" badge
+  badge: {
+    position: 'absolute',
+    top: '45%',
     flexDirection: 'row',
-    height: 8,
-    width: '70%',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: radius.full,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  badgeText: {
+    ...typography.label,
+    color: colors.teal,
+    fontSize: 11,
+    letterSpacing: 0,
+  },
+
+  // Simulated road grid lines
+  grid: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  roadH: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    height: 12,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  roadV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '35%',
+    width: 12,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+
+  // Colored route line
+  routeWrap: {
+    position: 'absolute',
+    top: '39%',
+    left: '35%',
+    width: '55%',
+    height: 6,
+    flexDirection: 'row',
     borderRadius: radius.full,
     overflow: 'hidden',
-    marginTop: spacing.md,
   },
-  completed: { height: '100%', backgroundColor: colors.border },
-  remaining: { height: '100%', backgroundColor: colors.safe },
-  caution:   { height: '100%', backgroundColor: colors.caution },
-  hard:      { height: '100%', backgroundColor: colors.hard },
-  puck: {
-    marginTop: -4,
-    width: '70%',
+  routeSeg: { height: '100%' },
+
+  // User puck
+  puckOuter: {
+    position: 'absolute',
+    top: '38%',
+    left: '34%',
+    width: 22,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.tealLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  turnCount: {
-    ...typography.label,
+  puckInner: {
+    width: 12,
+    height: 12,
+    borderRadius: radius.full,
+    backgroundColor: colors.teal,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+
+  hint: {
+    position: 'absolute',
+    bottom: '32%',
+    ...typography.bodySmall,
     color: colors.textMuted,
-    marginTop: spacing.sm,
   },
 });
 
 const stat = StyleSheet.create({
-  item:  { alignItems: 'center', flex: 1 },
-  value: { ...typography.displayMedium, color: colors.textPrimary, fontSize: 20 },
-  label: { ...typography.label, color: colors.textMuted, marginTop: 2 },
+  col:   { flex: 1, alignItems: 'center', gap: 4 },
+  value: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
+  label: { ...typography.label, color: colors.textMuted, fontSize: 10, letterSpacing: 0.3 },
 });

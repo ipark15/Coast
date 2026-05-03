@@ -1,226 +1,356 @@
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import BackNav from '@/src/components/BackNav';
 import GhostButton from '@/src/components/GhostButton';
-import InfoCard from '@/src/components/InfoCard';
-import PrimaryButton from '@/src/components/PrimaryButton';
-import RouteListItem from '@/src/components/RouteListItem';
 import SafetyBar from '@/src/components/SafetyBar';
-import StatCard from '@/src/components/StatCard';
 import { colors, radius, spacing, typography } from '@/src/tokens';
 
 // TODO(MVP): Replace with real route data from Mapbox Directions API
 const MOCK_ROUTE = {
-  destination: 'Silver Lake Reservoir',
-  stats: { distance: '2.4 mi', time: '18 min', elevation: '+124 ft' },
-  safety: { safe: 78, caution: 15, hard: 7 },
-  turns: [
-    { type: 'safe',    direction: 'straight', street: 'Fountain Ave',    distance: '0.4 mi' },
-    { type: 'safe',    direction: 'right',    street: 'Virgil Ave',      distance: '0.2 mi' },
-    { type: 'caution', direction: 'straight', street: 'Sunset Blvd',     distance: '0.3 mi' },
-    { type: 'safe',    direction: 'left',     street: 'Silver Lake Blvd',distance: '0.8 mi' },
-    { type: 'safe',    direction: 'right',    street: 'Reservoir Dr',    distance: '0.2 mi' },
+  destination:  'Silver Lake Reservoir',
+  address:      '1850 W Silver Lake Dr',
+  stats:        { distance: '2.4', time: '18', elevation: '+124' },
+  safetyScore:  93,
+  safety:       { safe: 78, caution: 15, hard: 7 },
+  description:  'This route prioritizes high-visibility bike lanes and protected paths through Fountain Ave. The "Hard" segments are limited to two busy intersections where active signaling and caution are advised.',
+  segments: [
+    { name: 'Fountain Ave Protected Lane', detail: '1.2 MI • FULLY PROTECTED',  status: 'safe'    as const },
+    { name: 'Sunset Junction Crossing',    detail: '0.4 MI • MODERATE TRAFFIC', status: 'caution' as const },
+    { name: 'Neighborhood Greenway',       detail: '0.8 MI • LOW TRAFFIC',      status: 'safe'    as const },
   ],
-} as const;
+};
+
+const STATUS_ICON: Record<'safe' | 'caution', React.ComponentProps<typeof FontAwesome>['name']> = {
+  safe:    'check-circle',
+  caution: 'exclamation-circle',
+};
 
 export default function RouteSummaryScreen() {
   const router = useRouter();
 
   return (
     <SafeAreaView style={styles.safe}>
+      <TouchableOpacity style={styles.backRow} onPress={() => router.back()} hitSlop={8} activeOpacity={0.7}>
+        <FontAwesome name="arrow-left" size={16} color={colors.teal} />
+        <Text style={styles.backLabel}>Back</Text>
+      </TouchableOpacity>
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <BackNav label="Back" onPress={() => router.back()} />
-
-        {/* Title */}
-        <Text style={styles.titleLabel}>Safest route to</Text>
-        <Text style={styles.titleDestination}>{MOCK_ROUTE.destination}</Text>
-
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <StatCard value={MOCK_ROUTE.stats.distance} label="Distance" />
-          <StatCard value={MOCK_ROUTE.stats.time} label="Est. Time" />
-          <StatCard value={MOCK_ROUTE.stats.elevation} label="Elevation" />
+        {/* Destination header */}
+        <View style={styles.destCard}>
+          <View style={styles.destIcon}>
+            <FontAwesome name="bicycle" size={20} color={colors.teal} />
+          </View>
+          <View>
+            <Text style={styles.destLabel}>Navigating to {MOCK_ROUTE.destination}</Text>
+            <Text style={styles.destAddress}>{MOCK_ROUTE.address}</Text>
+          </View>
         </View>
 
-        {/* Mini map placeholder */}
-        <View style={styles.miniMap}>
-          <View style={styles.miniMapTrack}>
-            <View style={[styles.miniMapSegment, { flex: 78, backgroundColor: colors.safe }]} />
-            <View style={[styles.miniMapSegment, { flex: 15, backgroundColor: colors.caution }]} />
-            <View style={[styles.miniMapSegment, { flex: 7,  backgroundColor: colors.hard }]} />
+        {/* Quick stats row */}
+        <View style={styles.quickStats}>
+          <View style={styles.quickStat}>
+            <FontAwesome name="clock-o" size={14} color={colors.textMuted} />
+            <Text style={styles.quickStatValue}>{MOCK_ROUTE.stats.time} min</Text>
           </View>
-          <View style={styles.miniMapPill}>
-            <Text style={styles.miniMapPillText}>Your location → Silver Lake</Text>
+          <View style={styles.quickStatDot} />
+          <View style={styles.quickStat}>
+            <FontAwesome name="map-marker" size={14} color={colors.textMuted} />
+            <Text style={styles.quickStatValue}>{MOCK_ROUTE.stats.distance} mi</Text>
           </View>
-          {/* TODO(MVP): Replace with real Mapbox map preview */}
         </View>
+
+        {/* Safety bar + route label */}
+        <SafetyBar safe={MOCK_ROUTE.safety.safe} caution={MOCK_ROUTE.safety.caution} hard={MOCK_ROUTE.safety.hard} />
+        <Text style={styles.routeLabel}>Your location → Silver Lake</Text>
 
         {/* Safety breakdown */}
-        <InfoCard label="Safety Breakdown">
-          <SafetyBar
-            safe={MOCK_ROUTE.safety.safe}
-            caution={MOCK_ROUTE.safety.caution}
-            hard={MOCK_ROUTE.safety.hard}
-          />
-          <View style={styles.legend}>
-            <LegendDot color={colors.safe} label={`Protected ${MOCK_ROUTE.safety.safe}%`} />
-            <Text style={styles.legendSep}>·</Text>
-            <LegendDot color={colors.caution} label={`Caution ${MOCK_ROUTE.safety.caution}%`} />
-            <Text style={styles.legendSep}>·</Text>
-            <LegendDot color={colors.hard} label={`Hard ${MOCK_ROUTE.safety.hard}%`} />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Safety Breakdown</Text>
+            <Text style={styles.safetyScore}>{MOCK_ROUTE.safetyScore}% Total Score</Text>
           </View>
-          <View style={styles.note}>
-            <Text style={styles.noteText}>
-              Most of this route uses protected infrastructure. The short stretch on Sunset Blvd has a painted lane — ride confidently and stay out of the door zone.
-            </Text>
+          <View style={styles.breakdownRow}>
+            <BreakdownItem color={colors.safe}    label="Protected" value={`${MOCK_ROUTE.safety.safe}%`} />
+            <BreakdownItem color={colors.caution} label="Caution"   value={`${MOCK_ROUTE.safety.caution}%`} />
+            <BreakdownItem color={colors.hard}    label="Hard"      value={`${MOCK_ROUTE.safety.hard}%`} />
           </View>
-        </InfoCard>
+        </View>
+
+        {/* Stat grid */}
+        <View style={styles.statGrid}>
+          <StatGridItem label="DISTANCE" value={MOCK_ROUTE.stats.distance} unit="MILES" />
+          <View style={styles.statGridDivider} />
+          <StatGridItem label="TIME" value={MOCK_ROUTE.stats.time} unit="MINUTES" />
+          <View style={styles.statGridDivider} />
+          <StatGridItem label="ELEVATION" value={MOCK_ROUTE.stats.elevation} unit="FEET" />
+        </View>
+
+        {/* Description */}
+        <Text style={styles.description}>{MOCK_ROUTE.description}</Text>
 
         {/* Route overview */}
-        <InfoCard label="Route Overview">
-          {MOCK_ROUTE.turns.map((turn, i) => (
-            <RouteListItem
-              key={i}
-              type={turn.type}
-              direction={turn.direction}
-              street={turn.street}
-              distance={turn.distance}
-            />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Route Overview</Text>
+            <TouchableOpacity hitSlop={8}>
+              <Text style={styles.viewAll}>VIEW FULL LIST</Text>
+            </TouchableOpacity>
+          </View>
+          {MOCK_ROUTE.segments.map((seg, i) => (
+            <View key={i} style={[styles.segmentRow, i < MOCK_ROUTE.segments.length - 1 && styles.segmentBorder]}>
+              <View style={[styles.segmentIconWrap, { backgroundColor: seg.status === 'safe' ? colors.safeLight : colors.cautionLight }]}>
+                <FontAwesome
+                  name={STATUS_ICON[seg.status]}
+                  size={18}
+                  color={seg.status === 'safe' ? colors.safe : colors.caution}
+                />
+              </View>
+              <View style={styles.segmentText}>
+                <Text style={styles.segmentName}>{seg.name}</Text>
+                <Text style={styles.segmentDetail}>{seg.detail}</Text>
+              </View>
+            </View>
           ))}
-        </InfoCard>
-
+        </View>
       </ScrollView>
 
-      {/* Footer buttons */}
+      {/* Footer */}
       <View style={styles.footer}>
-        <PrimaryButton label="Show on map" onPress={() => router.push('/map')} />
-        <GhostButton label="Try a different route" onPress={() => router.back()} />
+        <GhostButton label="Show on map" icon="map" onPress={() => router.push('/map')} />
+        <GhostButton label="Try a different route" icon="random" onPress={() => router.back()} />
       </View>
     </SafeAreaView>
   );
 }
 
-function LegendDot({ color, label }: { color: string; label: string }) {
+function BreakdownItem({ color, label, value }: { color: string; label: string; value: string }) {
   return (
-    <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendLabel}>{label}</Text>
+    <View style={styles.breakdownItem}>
+      <View style={[styles.breakdownDot, { backgroundColor: color }]} />
+      <Text style={styles.breakdownLabel}>{label}</Text>
+      <Text style={[styles.breakdownValue, { color }]}>{value}</Text>
+    </View>
+  );
+}
+
+function StatGridItem({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <View style={styles.statGridItem}>
+      <Text style={styles.statGridLabel}>{label}</Text>
+      <Text style={styles.statGridValue}>{value}</Text>
+      <Text style={styles.statGridUnit}>{unit}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
+  safe:    { flex: 1, backgroundColor: colors.background },
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing.md,
-    paddingTop: spacing.sm,
-    gap: spacing.md,
-  },
-
-  // Title
-  titleLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-  },
-  titleDestination: {
-    ...typography.displayMedium,
+  backLabel: {
+    ...typography.subheading,
     color: colors.teal,
   },
+  scroll:  { flex: 1 },
+  content: { padding: spacing.md, paddingTop: spacing.sm, gap: spacing.md, paddingBottom: spacing.lg },
 
-  // Stats
-  statsRow: {
+  // Destination card
+  destCard: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  destIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.tealLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  destLabel: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+  },
+  destAddress: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
   },
 
-  // Mini map
-  miniMap: {
+  // Quick stats
+  quickStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  quickStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickStatValue: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+  },
+  quickStatDot: {
+    width: 4,
+    height: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.border,
+  },
+
+  routeLabel: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: -spacing.xs,
+  },
+
+  // Sections
+  section: {
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    minHeight: 100,
-    justifyContent: 'center',
   },
-  miniMapTrack: {
-    flexDirection: 'row',
-    height: 6,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  miniMapSegment: {
-    height: '100%',
-  },
-  miniMapPill: {
-    alignSelf: 'center',
-    backgroundColor: colors.tealLight,
-    borderRadius: radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
-  },
-  miniMapPillText: {
-    ...typography.label,
-    color: colors.teal,
-  },
-
-  // Legend
-  legend: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
+    justifyContent: 'space-between',
   },
-  legendItem: {
+  sectionTitle: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+  },
+  safetyScore: {
+    ...typography.subheading,
+    color: colors.teal,
+    fontSize: 14,
+  },
+  viewAll: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+
+  // Breakdown
+  breakdownRow: {
     flexDirection: 'row',
+    gap: spacing.md,
+  },
+  breakdownItem: {
+    flex: 1,
     alignItems: 'center',
     gap: 4,
   },
-  legendDot: {
-    width: 8,
-    height: 8,
+  breakdownDot: {
+    width: 10,
+    height: 10,
     borderRadius: radius.full,
   },
-  legendLabel: {
-    ...typography.label,
-    color: colors.textSecondary,
-    letterSpacing: 0,
-    fontSize: 12,
-  },
-  legendSep: {
+  breakdownLabel: {
     ...typography.label,
     color: colors.textMuted,
+    letterSpacing: 0,
+    fontSize: 11,
+  },
+  breakdownValue: {
+    ...typography.subheading,
+    fontSize: 16,
   },
 
-  // Note / blockquote
-  note: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.teal,
-    paddingLeft: spacing.sm,
-    marginTop: spacing.sm,
+  // Stat grid
+  statGrid: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
-  noteText: {
+  statGridItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statGridDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    alignSelf: 'stretch',
+  },
+  statGridLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  statGridValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.teal,
+  },
+  statGridUnit: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+
+  // Description
+  description: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+
+  // Segments
+  segmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  segmentBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  segmentIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentText: { flex: 1 },
+  segmentName: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+    fontSize: 14,
+  },
+  segmentDetail: {
     ...typography.bodySmall,
     color: colors.textMuted,
-    fontStyle: 'italic',
   },
 
-  // Footer
+  // Footer buttons
   footer: {
     padding: spacing.md,
     paddingBottom: spacing.lg,

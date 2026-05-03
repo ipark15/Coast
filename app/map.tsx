@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import GhostButton from '@/src/components/GhostButton';
 import LanePill from '@/src/components/LanePill';
@@ -23,8 +23,12 @@ import { LaneType, laneConfig } from '@/src/utils/laneColor';
 // TODO(MVP): Replace with real route data from Mapbox Directions API
 const MOCK_ROUTE = {
   destination: 'Silver Lake Reservoir',
-  summary: '2.4 mi · 18 min · Gentle',
-  safety: { safe: 78, caution: 15, hard: 7 },
+  address:     '1850 W Silver Lake Dr',
+  time:        '18 min',
+  distance:    '2.4 MILES',
+  description: 'Low traffic & wide bike lanes',
+  safePercent: 92,
+  safety:      { safe: 78, caution: 15, hard: 7 },
   turns: [
     { type: 'safe'    as LaneType, direction: 'straight' as const, street: 'Fountain Ave',     distance: '0.4 mi' },
     { type: 'safe'    as LaneType, direction: 'right'    as const, street: 'Virgil Ave',       distance: '0.2 mi' },
@@ -34,112 +38,116 @@ const MOCK_ROUTE = {
   ],
 };
 
-// Sheet snap positions (excluding bottom inset, added at render time)
-const COLLAPSED_HEIGHT = 215;
-const EXPANDED_HEIGHT  = 490;
-const DRAG_RANGE       = EXPANDED_HEIGHT - COLLAPSED_HEIGHT; // 275
+const SHEET_COLLAPSED = 220;
+const SHEET_EXPANDED  = 480;
+const DRAG_RANGE      = SHEET_EXPANDED - SHEET_COLLAPSED;
 
 export default function MapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [learnLane, setLearnLane] = useState<LaneType | null>(null);
+  const [isExpanded, setIsExpanded]   = useState(false);
+  const [learnLane, setLearnLane]     = useState<LaneType | null>(null);
 
-  // Refs so PanResponder callbacks never go stale
-  const positionRef    = useRef(DRAG_RANGE); // current translateY value
-  const isExpandedRef  = useRef(false);
-  const translateY     = useRef(new Animated.Value(DRAG_RANGE)).current;
+  const positionRef   = useRef(DRAG_RANGE);
+  const isExpandedRef = useRef(false);
+  const translateY    = useRef(new Animated.Value(DRAG_RANGE)).current;
 
   const snapTo = (expand: boolean) => {
     const toValue = expand ? 0 : DRAG_RANGE;
     positionRef.current   = toValue;
     isExpandedRef.current = expand;
     setIsExpanded(expand);
-    Animated.spring(translateY, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
+    Animated.spring(translateY, { toValue, useNativeDriver: true, tension: 65, friction: 11 }).start();
   };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder:  (_, { dy }) => Math.abs(dy) > 4,
-      onPanResponderGrant: () => {
-        translateY.stopAnimation();
-      },
-      onPanResponderMove: (_, { dy }) => {
-        const next = Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy));
-        translateY.setValue(next);
+      onPanResponderGrant:  () => { translateY.stopAnimation(); },
+      onPanResponderMove:   (_, { dy }) => {
+        translateY.setValue(Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy)));
       },
       onPanResponderRelease: (_, { dy, vy }) => {
-        const landed = Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy));
+        const landed    = Math.max(0, Math.min(DRAG_RANGE, positionRef.current + dy));
         const goingUp   = vy < -0.3;
         const goingDown = vy >  0.3;
-        const expand    = goingDown ? false : goingUp ? true : landed < DRAG_RANGE / 2;
-        snapTo(expand);
+        snapTo(goingDown ? false : goingUp ? true : landed < DRAG_RANGE / 2);
       },
     })
   ).current;
 
-  const sheetHeight = EXPANDED_HEIGHT + insets.bottom;
-
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
 
-      {/* ── Map layer ── */}
-      <View style={StyleSheet.absoluteFill}>
-        <MapPlaceholder onTapLearn={() => setLearnLane('caution')} />
+      {/* ── Dark green header (in document flow) ── */}
+      <SafeAreaView edges={['top']} style={styles.headerSafe}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.headerBtn}>
+            <FontAwesome name="arrow-left" size={16} color={colors.surface} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Bicycle Kitchen</Text>
+            <Text style={styles.headerSub}>{MOCK_ROUTE.destination.toUpperCase()}</Text>
+          </View>
+          <TouchableOpacity style={styles.headerIconCircle} hitSlop={8}>
+            <FontAwesome name="compass" size={14} color={colors.surface} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* ── Map + overlays ── */}
+      <View style={styles.mapArea}>
+        {/* Map placeholder */}
+        <View style={StyleSheet.absoluteFill}>
+          <MapPlaceholder onTapLearn={() => setLearnLane('caution')} />
+        </View>
+
+        {/* Destination card overlaid on map */}
+        <View style={styles.destCard}>
+          <View style={styles.destIconWrap}>
+            <FontAwesome name="bicycle" size={18} color={colors.teal} />
+          </View>
+          <View style={styles.destText}>
+            <Text style={styles.destName}>Navigating to Silver Lake</Text>
+            <Text style={styles.destAddress}>
+              <FontAwesome name="map-marker" size={11} color={colors.textMuted} /> {MOCK_ROUTE.address}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.destNav} hitSlop={8}>
+            <FontAwesome name="location-arrow" size={16} color={colors.teal} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Draggable bottom sheet */}
+        <Animated.View
+          style={[
+            styles.sheet,
+            { height: SHEET_EXPANDED + insets.bottom, transform: [{ translateY }] },
+          ]}
+        >
+          <View style={styles.dragArea} {...panResponder.panHandlers}>
+            <View style={styles.handle} />
+          </View>
+          <View style={[styles.sheetContent, { paddingBottom: insets.bottom + spacing.sm }]}>
+            {isExpanded ? (
+              <ExpandedDirections
+                turns={MOCK_ROUTE.turns}
+                safety={MOCK_ROUTE.safety}
+                onCollapse={() => snapTo(false)}
+              />
+            ) : (
+              <CollapsedCard
+                route={MOCK_ROUTE}
+                onPreview={() => router.push('/preview')}
+                onStart={() => router.push('/ride')}
+              />
+            )}
+          </View>
+        </Animated.View>
       </View>
 
-      {/* ── Top bar ── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <FontAwesome name="arrow-left" size={18} color={colors.surface} />
-        </TouchableOpacity>
-        <View style={styles.topBarCenter}>
-          <Text style={styles.topBarSub}>Navigating to</Text>
-          <Text style={styles.topBarTitle}>{MOCK_ROUTE.destination}</Text>
-        </View>
-        <LegendPill />
-      </View>
-
-      {/* ── Bottom sheet ── */}
-      <Animated.View
-        style={[
-          styles.sheet,
-          { height: sheetHeight, transform: [{ translateY }] },
-        ]}
-      >
-        {/* Drag zone — only this area has pan handlers */}
-        <View style={styles.dragArea} {...panResponder.panHandlers}>
-          <View style={styles.handle} />
-        </View>
-
-        {/* Sheet content */}
-        <View style={[styles.sheetContent, { paddingBottom: insets.bottom + spacing.sm }]}>
-          {isExpanded ? (
-            <ExpandedDirections
-              turns={MOCK_ROUTE.turns}
-              safety={MOCK_ROUTE.safety}
-              summary={MOCK_ROUTE.summary}
-              onCollapse={() => snapTo(false)}
-            />
-          ) : (
-            <CollapsedSheet
-              summary={MOCK_ROUTE.summary}
-              safety={MOCK_ROUTE.safety}
-              onExpand={() => snapTo(true)}
-              onPreview={() => router.push('/preview')}
-              onStart={() => router.push('/ride')}
-            />
-          )}
-        </View>
-      </Animated.View>
-
-      {/* ── Lane learn overlay ── */}
+      {/* Lane learn overlay */}
       {learnLane && (
         <LaneLearnSheet
           type={learnLane}
@@ -147,7 +155,6 @@ export default function MapScreen() {
           onClose={() => setLearnLane(null)}
         />
       )}
-
     </View>
   );
 }
@@ -173,110 +180,72 @@ function MapPlaceholder({ onTapLearn }: { onTapLearn: () => void }) {
   );
 }
 
-// ─── Legend pill ─────────────────────────────────────────────────────────────
+// ─── Collapsed card ───────────────────────────────────────────────────────────
 
-function LegendPill() {
-  const LABELS: Record<LaneType, string> = { safe: 'Safe', caution: 'Caution', hard: 'Hard' };
-  return (
-    <View style={legend.pill}>
-      {(['safe', 'caution', 'hard'] as LaneType[]).map((type) => (
-        <View key={type} style={legend.item}>
-          <View style={[legend.dot, { backgroundColor: laneConfig[type].color }]} />
-          <Text style={legend.label}>{LABELS[type]}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-// ─── Collapsed sheet content ──────────────────────────────────────────────────
-
-function CollapsedSheet({
-  summary, safety, onExpand, onPreview, onStart,
+function CollapsedCard({
+  route, onPreview, onStart,
 }: {
-  summary: string;
-  safety: { safe: number; caution: number; hard: number };
-  onExpand: () => void;
+  route: typeof MOCK_ROUTE;
   onPreview: () => void;
   onStart: () => void;
 }) {
   return (
     <>
-      <View style={sheet.titleRow}>
-        <View>
-          <Text style={sheet.routeTitle}>Safest route</Text>
-          <Text style={sheet.summary}>{summary}</Text>
+      <View style={card.titleRow}>
+        <View style={card.recommendedBadge}>
+          <Text style={card.recommendedText}>RECOMMENDED</Text>
         </View>
-        <TouchableOpacity onPress={onExpand} style={sheet.directionsToggle} hitSlop={8}>
-          <Text style={sheet.directionsLabel}>Directions </Text>
-          <FontAwesome name="chevron-up" size={11} color={colors.teal} />
-        </TouchableOpacity>
+        <Text style={card.routeName}>Safest route</Text>
+        <Text style={card.time}>{route.time}</Text>
       </View>
-      <View style={sheet.bar}>
-        <SafetyBar safe={safety.safe} caution={safety.caution} hard={safety.hard} />
+      <View style={card.subtitleRow}>
+        <Text style={card.description}>{route.description}</Text>
+        <Text style={card.distance}>{route.distance}</Text>
       </View>
-      <View style={sheet.buttons}>
-        <View style={sheet.buttonHalf}>
-          <GhostButton label="Preview ride" onPress={onPreview} />
-        </View>
-        <View style={sheet.buttonHalf}>
-          <PrimaryButton label="Start ride →" onPress={onStart} />
-        </View>
+      <View style={card.profileRow}>
+        <Text style={card.profileLabel}>ROUTE SAFETY PROFILE</Text>
+        <Text style={card.profilePct}>{route.safePercent}% SAFE</Text>
+      </View>
+      <SafetyBar safe={route.safety.safe} caution={route.safety.caution} hard={route.safety.hard} />
+      <View style={card.buttons}>
+        <GhostButton label="Preview" icon="eye" onPress={onPreview} style={card.halfBtn} />
+        <PrimaryButton label="Start ride" icon="play" variant="dark" onPress={onStart} style={card.halfBtn} />
       </View>
     </>
   );
 }
 
-// ─── Expanded directions content ─────────────────────────────────────────────
+// ─── Expanded directions ──────────────────────────────────────────────────────
 
 function ExpandedDirections({
-  turns, safety, summary, onCollapse,
+  turns, safety, onCollapse,
 }: {
   turns: typeof MOCK_ROUTE.turns;
   safety: { safe: number; caution: number; hard: number };
-  summary: string;
   onCollapse: () => void;
 }) {
   return (
     <>
-      <View style={sheet.titleRow}>
-        <View>
-          <Text style={sheet.routeTitle}>Safest route</Text>
-          <Text style={sheet.summary}>{summary}</Text>
-        </View>
-        <TouchableOpacity onPress={onCollapse} style={sheet.directionsToggle} hitSlop={8}>
-          <Text style={sheet.directionsLabel}>Less </Text>
+      <View style={card.titleRow}>
+        <Text style={card.routeName}>Turn-by-turn</Text>
+        <TouchableOpacity onPress={onCollapse} style={card.collapseBtn} hitSlop={8}>
+          <Text style={card.collapseText}>Less </Text>
           <FontAwesome name="chevron-down" size={11} color={colors.teal} />
         </TouchableOpacity>
       </View>
-      <View style={sheet.bar}>
-        <SafetyBar safe={safety.safe} caution={safety.caution} hard={safety.hard} />
-      </View>
-      <Text style={sheet.turnLabel}>TURN-BY-TURN</Text>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <SafetyBar safe={safety.safe} caution={safety.caution} hard={safety.hard} />
+      <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
         {turns.map((turn, i) => (
-          <RouteListItem
-            key={i}
-            type={turn.type}
-            direction={turn.direction}
-            street={turn.street}
-            distance={turn.distance}
-          />
+          <RouteListItem key={i} type={turn.type} direction={turn.direction} street={turn.street} distance={turn.distance} />
         ))}
       </ScrollView>
     </>
   );
 }
 
-// ─── Lane learn sheet ────────────────────────────────────────────────────────
+// ─── Lane learn sheet ─────────────────────────────────────────────────────────
 
-function LaneLearnSheet({
-  type, insetBottom, onClose,
-}: {
-  type: LaneType;
-  insetBottom: number;
-  onClose: () => void;
-}) {
+function LaneLearnSheet({ type, insetBottom, onClose }: { type: LaneType; insetBottom: number; onClose: () => void }) {
   const config = laneConfig[type];
   return (
     <>
@@ -301,33 +270,95 @@ function LaneLearnSheet({
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.headerDark,
   },
-  topBar: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    backgroundColor: colors.teal,
+  headerSafe: {
+    backgroundColor: colors.headerDark,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
-  topBarCenter: {
+  headerBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenter: {
     flex: 1,
     alignItems: 'center',
   },
-  topBarSub: {
-    ...typography.label,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  topBarTitle: {
+  headerTitle: {
     ...typography.subheading,
     color: colors.surface,
   },
-  // Sheet wrapper (Animated.View)
+  headerSub: {
+    ...typography.label,
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  headerIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  destCard: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    right: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  destIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: colors.tealLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  destText: { flex: 1 },
+  destName: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+    fontSize: 14,
+  },
+  destAddress: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  destNav: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sheet: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
@@ -341,7 +372,6 @@ const styles = StyleSheet.create({
     elevation: 8,
     overflow: 'hidden',
   },
-  // Drag-sensitive zone at the top of the sheet
   dragArea: {
     alignItems: 'center',
     paddingTop: spacing.sm,
@@ -352,9 +382,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: radius.full,
     backgroundColor: colors.border,
-    marginBottom: spacing.xs,
   },
-  // Scrollable content below drag zone
   sheetContent: {
     flex: 1,
     paddingHorizontal: spacing.md,
@@ -364,13 +392,13 @@ const styles = StyleSheet.create({
 const map = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8E4D8',
+    backgroundColor: colors.mapBackground,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  label:   { ...typography.subheading, color: colors.textMuted },
-  sub:     { ...typography.bodySmall, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl },
+  label: { ...typography.subheading, color: colors.textMuted },
+  sub:   { ...typography.bodySmall, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl },
   routeTrack: {
     flexDirection: 'row',
     height: 6,
@@ -406,35 +434,88 @@ const map = StyleSheet.create({
   },
 });
 
-const legend = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
-    gap: spacing.sm,
-  },
-  item:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dot:   { width: 6, height: 6, borderRadius: radius.full },
-  label: { ...typography.label, color: colors.surface, fontSize: 10, letterSpacing: 0 },
-});
-
-const sheet = StyleSheet.create({
+const card = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  routeTitle:      { ...typography.subheading, color: colors.textPrimary },
-  summary:         { ...typography.bodySmall, color: colors.textMuted },
-  directionsToggle:{ flexDirection: 'row', alignItems: 'center' },
-  directionsLabel: { ...typography.label, color: colors.teal, letterSpacing: 0, fontSize: 12 },
-  bar:             { marginVertical: spacing.sm },
-  buttons:         { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  buttonHalf:      { flex: 1 },
-  turnLabel:       { ...typography.label, color: colors.textMuted, marginBottom: spacing.xs, marginTop: spacing.sm },
+  recommendedBadge: {
+    backgroundColor: colors.tealLight,
+    borderRadius: radius.full,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
+  },
+  recommendedText: {
+    ...typography.label,
+    color: colors.teal,
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  routeName: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  time: {
+    ...typography.subheading,
+    color: colors.textPrimary,
+    fontSize: 16,
+  },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  description: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    flex: 1,
+  },
+  distance: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 11,
+    letterSpacing: 0.3,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  profileLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  profilePct: {
+    ...typography.label,
+    color: colors.safe,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  halfBtn: {
+    flex: 1,
+  },
+  collapseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collapseText: {
+    ...typography.label,
+    color: colors.teal,
+    letterSpacing: 0,
+    fontSize: 12,
+  },
 });
 
 const learn = StyleSheet.create({
